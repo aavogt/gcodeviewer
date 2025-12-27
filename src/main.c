@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -23,10 +24,20 @@
 
 char *c, *cend, *c0;
 
-typedef struct {
-  float x, y, z, e;
-} P;
-P ps[2];
+// not quite memcmp if there is padding between Camera fields.
+bool CameraNEQ(Camera camera, Camera prev_camera) {
+  return camera.position.x != prev_camera.position.x ||
+         camera.position.y != prev_camera.position.y ||
+         camera.position.z != prev_camera.position.z ||
+         camera.target.x != prev_camera.target.x ||
+         camera.target.y != prev_camera.target.y ||
+         camera.target.z != prev_camera.target.z ||
+         camera.up.x != prev_camera.up.x || camera.up.y != prev_camera.up.y ||
+         camera.up.z != prev_camera.up.z || camera.fovy != prev_camera.fovy ||
+         camera.projection != prev_camera.projection;
+}
+
+Vector4 ps[2];
 
 static bool rel[4] = {false, false, false, false}; // X,Y,Z,E relative flags
 
@@ -36,7 +47,7 @@ static inline int isspace_ascii(char ch) {
 
 void advance_ps_reset() {
   c = c0;
-  ps[1] = (P){0, 0, 0, 0};
+  ps[1] = (Vector4){0, 0, 0, 0};
   for (int i = 0; i < 4; i++)
     rel[i] = 0;
 }
@@ -49,7 +60,7 @@ bool advance_ps() {
 
   while (c < cend) {
     if (*c == '\n' || c == c0) {
-      char *q = c + 1;
+      char *q = (c == c0) ? c : c + 1;
 
       // find end of line
       char *line_end = q;
@@ -102,7 +113,7 @@ bool advance_ps() {
                         case 'X': ps[1].x = rel[0] ? ps[0].x + f : f; break;
                         case 'Y': ps[1].y = rel[1] ? ps[0].y + f : f; break;
                         case 'Z': ps[1].z = rel[2] ? ps[0].z + f : f; break;
-                        case 'E': ps[1].e = rel[3] ? ps[0].e + f : f; break;
+                        case 'E': ps[1].w = rel[3] ? ps[0].w + f : f; break;
                       }
                     // clang-format on
                     s = num_end_f;
@@ -147,14 +158,17 @@ bool advance_ps() {
   return false;
 }
 
-P ps_max, ps_min, ps_avg, ps_trim;
+Vector4 ps_max, ps_min, ps_avg, ps_trim;
 #define NTRIM 200
 static float sorting[NTRIM];
 static float trimmed_avg(size_t off) {
   advance_ps_reset();
   int n = 0;
   while (n < NTRIM && advance_ps()) {
-    float v = *(float *)((char *)&ps[1] + off);
+
+#define FIELDF(p, off) (*(float *)((char *)(p) + (off)))
+
+    float v = FIELDF(&ps[1], off);
     int j = n;
     while (j > 0 && sorting[j - 1] > v) {
       sorting[j] = sorting[j - 1];
@@ -181,27 +195,17 @@ static float trimmed_avg(size_t off) {
 void gcode_bbox() {
   c = c0;
   int n = 0;
-  size_t o[4] = {offsetof(P, x), offsetof(P, y), offsetof(P, z),
-                 offsetof(P, e)};
-
-#define FIELDF(p, off) (*(float *)((char *)(p) + (off)))
+  size_t o[4] = {offsetof(Vector4, x), offsetof(Vector4, y),
+                 offsetof(Vector4, z), offsetof(Vector4, w)};
 
   advance_ps_reset();
   while (advance_ps()) {
-    ps_max.x = MAX(ps_max.x, ps[1].x);
-    ps_min.x = MIN(ps_min.x, ps[1].x);
-    ps_max.y = MAX(ps_max.y, ps[1].y);
-    ps_min.y = MIN(ps_min.y, ps[1].y);
-    ps_max.z = MAX(ps_max.z, ps[1].z);
-    ps_min.z = MIN(ps_min.z, ps[1].z);
-    ps_max.e = MAX(ps_max.e, ps[1].e);
-    ps_min.e = MIN(ps_min.e, ps[1].e);
-    for (int i = 0; i < 4; i++)
-      FIELDF(&ps_avg, o[i]) = FIELDF(&ps[1], o[i]);
+    ps_max = Vector4Max(ps_max, ps[1]);
+    ps_min = Vector4Min(ps_min, ps[1]);
+    ps_avg = Vector4Add(ps_avg, ps[1]);
     n++;
   }
-  for (int i = 0; i < 4; i++)
-    FIELDF(&ps_avg, o[i]) /= n;
+  ps_avg = Vector4Divide(ps_avg, (Vector4){n, n, n, n});
 
   for (int i = 0; i < 4; i++)
     FIELDF(&ps_trim, o[i]) = trimmed_avg(o[i]);
@@ -219,8 +223,10 @@ void mmapfile(char *file) {
   struct stat statbuf;
   fstat(fd, &statbuf);
   if (c0) {
-    if (statbuf_old.st_mtim.tv_sec <= statbuf.st_mtim.tv_sec &&
-        statbuf_old.st_mtim.tv_nsec < statbuf.st_mtim.tv_nsec) {
+    bool newer = (statbuf.st_mtim.tv_sec > statbuf_old.st_mtim.tv_sec) ||
+                 (statbuf.st_mtim.tv_sec == statbuf_old.st_mtim.tv_sec &&
+                  statbuf.st_mtim.tv_nsec > statbuf_old.st_mtim.tv_nsec);
+    if (newer) {
       munmap(c0, cend - c0);
     } else {
       close(fd);
@@ -263,11 +269,12 @@ int main(int argc, char **argv) {
   // Render-to-texture cache for the 3D scene
   static RenderTexture2D rt;
   static bool rt_inited = false;
+  static bool has_prev_camera = false;
 
   int nframe = 0;
 
-  while (!WindowShouldClose() && !IsKeyReleased(KEY_Q) &&
-         !IsKeyReleased(KEY_ESCAPE)) {
+  while (!WindowShouldClose() && !IsKeyPressed(KEY_Q) &&
+         !IsKeyPressed(KEY_ESCAPE)) {
     nframe++;
     nframe = nframe % 20;
     if (nframe)
@@ -286,7 +293,7 @@ int main(int argc, char **argv) {
     }
 
     // Rebuild the cached texture only when camera changes
-    bool camera_changed = memcmp(&camera, &prev_camera, sizeof(Camera3D)) != 0;
+    bool camera_changed = !has_prev_camera || CameraNEQ(camera, prev_camera);
     if (camera_changed || scene_dirty) {
       BeginTextureMode(rt);
       ClearBackground(BLACK);
@@ -296,11 +303,12 @@ int main(int argc, char **argv) {
       while (advance_ps()) {
         DrawLine3D((Vector3){ps[0].x, ps[0].y, ps[0].z},
                    (Vector3){ps[1].x, ps[1].y, ps[1].z},
-                   ps[0].e < ps[1].e ? BLUE : YELLOW);
+                   ps[0].w < ps[1].w ? BLUE : YELLOW);
       }
 
       EndMode3D();
       EndTextureMode();
+      has_prev_camera = true;
       prev_camera = camera;
       scene_dirty = false;
     }
