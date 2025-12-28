@@ -9,33 +9,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define MIN(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a < _b ? _a : _b;                                                         \
-  })
-#define MAX(a, b)                                                              \
-  ({                                                                           \
-    __typeof__(a) _a = (a);                                                    \
-    __typeof__(b) _b = (b);                                                    \
-    _a > _b ? _a : _b;                                                         \
-  })
-
 char *c, *cend, *c0;
-
-// not quite memcmp if there is padding between Camera fields.
-bool CameraNEQ(Camera camera, Camera prev_camera) {
-  return camera.position.x != prev_camera.position.x ||
-         camera.position.y != prev_camera.position.y ||
-         camera.position.z != prev_camera.position.z ||
-         camera.target.x != prev_camera.target.x ||
-         camera.target.y != prev_camera.target.y ||
-         camera.target.z != prev_camera.target.z ||
-         camera.up.x != prev_camera.up.x || camera.up.y != prev_camera.up.y ||
-         camera.up.z != prev_camera.up.z || camera.fovy != prev_camera.fovy ||
-         camera.projection != prev_camera.projection;
-}
 
 Vector4 ps[2];
 
@@ -211,7 +185,7 @@ void gcode_bbox() {
     FIELDF(&ps_trim, o[i]) = trimmed_avg(o[i]);
 }
 
-static bool scene_dirty = true;
+static bool dirty = true;
 struct stat statbuf_old;
 /// mmap or munmap/mmap the given file,
 /// depending on mtime
@@ -234,8 +208,8 @@ void mmapfile(char *file) {
     }
   }
   c0 = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  dirty = true;
   close(fd);
-  scene_dirty = true;
   cend = c0 + statbuf.st_size;
   statbuf_old = statbuf;
   c = c0;
@@ -264,37 +238,58 @@ int main(int argc, char **argv) {
                      .target = (Vector3){ps_trim.x, ps_trim.y, ps_trim.z},
                      .up = (Vector3){0, 0, 1},
                      .projection = CAMERA_ORTHOGRAPHIC};
-  Camera3D prev_camera;
 
   // Render-to-texture cache for the 3D scene
   static RenderTexture2D rt;
   static bool rt_inited = false;
-  static bool has_prev_camera = false;
-
-  int nframe = 0;
 
   while (!WindowShouldClose() && !IsKeyPressed(KEY_Q) &&
          !IsKeyPressed(KEY_ESCAPE)) {
-    nframe++;
-    nframe = nframe % 20;
-    if (nframe)
-      mmapfile(argv[1]); // check mtime and reload
+    {
+      static int n = 0;
+      n++;
+      n = n % 20;
+      if (n) {
+        mmapfile(argv[1]); // check mtime and reload
+        dirty = true;
+      }
+    }
 
-    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+      // rotate
       UpdateCamera(&camera, CAMERA_THIRD_PERSON);
+      dirty += Vector2LengthSqr(GetMouseDelta()) > 0;
+    }
+    if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+      // pan
+      Vector2 p = GetMousePosition();
+      Vector2 q = Vector2Subtract(p, GetMouseDelta());
+      Vector3 r = GetScreenToWorldRay(p, camera).position;
+      Vector3 s = GetScreenToWorldRay(q, camera).position;
+      Vector3 d = Vector3Subtract(s, r);
+      camera.position = Vector3Add(camera.position, d);
+      camera.target = Vector3Add(camera.target, d);
+      dirty = true;
+    }
+    {
+      // zoom
+      float f = GetMouseWheelMove();
+      camera.fovy = Clamp(camera.fovy / (1 + f / 6) - 7 * f, 20, 120);
+      if (fabsf(f) > 0)
+        dirty = true;
+    }
 
     // Create/recreate render target on first use or window resize
     if (!rt_inited || IsWindowResized()) {
       if (rt_inited)
         UnloadRenderTexture(rt);
       rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-      scene_dirty = true;
+      dirty = true;
       rt_inited = true;
     }
 
     // Rebuild the cached texture only when camera changes
-    bool camera_changed = !has_prev_camera || CameraNEQ(camera, prev_camera);
-    if (camera_changed || scene_dirty) {
+    if (dirty) {
       BeginTextureMode(rt);
       ClearBackground(BLACK);
       BeginMode3D(camera);
@@ -308,9 +303,7 @@ int main(int argc, char **argv) {
 
       EndMode3D();
       EndTextureMode();
-      has_prev_camera = true;
-      prev_camera = camera;
-      scene_dirty = false;
+      dirty = false;
     }
 
     // Draw cached texture to the screen
