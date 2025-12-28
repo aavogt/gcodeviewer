@@ -252,10 +252,8 @@ int main(int argc, char **argv) {
       static int n = 0;
       n++;
       n = n % 20;
-      if (n) {
+      if (n)
         mmapfile(argv[1]); // check mtime and reload
-        dirty = true;
-      }
     }
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
@@ -278,8 +276,7 @@ int main(int argc, char **argv) {
       // zoom
       float f = GetMouseWheelMove();
       camera.fovy = Clamp(camera.fovy / (1 + f / 6) - 7 * f, 20, 120);
-      if (fabsf(f) > 0)
-        dirty = true;
+      dirty += fabsf(f) > 0;
     }
 
     // Create/recreate render target on first use or window resize
