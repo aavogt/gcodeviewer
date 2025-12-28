@@ -219,7 +219,10 @@ int main(int argc, char **argv) {
   if (argc == 1 || (argc >= 2 && (0 == strcmp(argv[1], "-h") ||
                                   0 == strcmp(argv[1], "--help")))) {
     printf("usage: %s file.gcode\n", argv[0]);
-    printf("\n\tq ESC quit\n\tleft mouse drag rotate view\n");
+    printf("\n\tq ESC quit\n\tleft mouse drag rotates the view\n");
+    printf("\tright mouse drag pans the view\n");
+    printf("\tmouse wheel drag zooms the view\n");
+
     exit(0);
   }
   mmapfile(argv[1]);
