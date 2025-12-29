@@ -187,7 +187,6 @@ static float trimmed_avg(size_t off) {
       // no need to shift
       sum += v;
       n++;
-      // printf("keep %f<%f<%f\n", a, v, b);
     }
     if (v < a) {
       // shift left inserting v
@@ -195,7 +194,6 @@ static float trimmed_avg(size_t off) {
       for (; j < NTRIM && sorting[j] < v; j++) {
         sorting[j - 1] = sorting[j];
       }
-      // printf("shift left into %d %f\n", j, v);
       sorting[j] = v;
     }
     if (v > b) {
@@ -229,13 +227,12 @@ void gcode_bbox() {
     FIELDF(&ps_trim, o[i]) = trimmed_avg(o[i]);
 }
 
-static bool dirty = true;
 struct stat statbuf_old;
 /// mmap or munmap/mmap the given file,
 /// depending on mtime
 /// store the beginning at c0, end at cend
 /// c = c0
-void mmapfile(char *file) {
+bool mmapfile(char *file) {
   // mmap file
   int fd = open(file, O_RDONLY);
   struct stat statbuf;
@@ -248,15 +245,15 @@ void mmapfile(char *file) {
       munmap(c0, cend - c0);
     } else {
       close(fd);
-      return;
+      return false;
     }
   }
   c0 = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-  dirty = true;
   close(fd);
   cend = c0 + statbuf.st_size;
   statbuf_old = statbuf;
   c = c0;
+  return true;
 }
 
 int main(int argc, char **argv) {
@@ -291,7 +288,7 @@ int main(int argc, char **argv) {
 
   // Render-to-texture cache for the 3D scene
   static RenderTexture2D rt;
-  static bool rt_inited = false;
+  rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
   while (!WindowShouldClose() && !IsKeyPressed(KEY_Q) &&
          !IsKeyPressed(KEY_ESCAPE)) {
@@ -300,13 +297,15 @@ int main(int argc, char **argv) {
       n++;
       n = n % 20;
       if (n)
-        mmapfile(argv[1]); // check mtime and reload
+        if (mmapfile(argv[1]))
+          goto rebuild; // check mtime and reload
     }
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
       // rotate
       UpdateCamera(&camera, CAMERA_THIRD_PERSON);
-      dirty += Vector2LengthSqr(GetMouseDelta()) > 0;
+      if (Vector2LengthSqr(GetMouseDelta()) > 0)
+        goto rebuild;
     }
     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
       // pan
@@ -317,43 +316,26 @@ int main(int argc, char **argv) {
       Vector3 d = Vector3Subtract(s, r);
       camera.position = Vector3Add(camera.position, d);
       camera.target = Vector3Add(camera.target, d);
-      dirty = true;
+      goto rebuild;
     }
     {
       // zoom
       float f = GetMouseWheelMove();
       camera.fovy = Clamp(camera.fovy / (1 + f / 6) - 7 * f, 20, 120);
-      dirty += fabsf(f) > 0;
+      if (fabsf(f) > 0)
+        goto rebuild;
     }
 
-    // Create/recreate render target on first use or window resize
-    if (!rt_inited || IsWindowResized()) {
-      if (rt_inited)
-        UnloadRenderTexture(rt);
+    // Recreate render target on window resize
+    if (IsWindowResized() && (rt.texture.height < GetScreenHeight() ||
+                              rt.texture.width < GetScreenWidth())) {
+      UnloadRenderTexture(rt);
       rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-      dirty = true;
-      rt_inited = true;
-    }
-
-    // Rebuild the cached texture only when camera changes
-    if (dirty) {
-      BeginTextureMode(rt);
-      ClearBackground(BLACK);
-      BeginMode3D(camera);
-
-      advance_ps_reset();
-      while (advance_ps()) {
-        DrawLine3D((Vector3){ps[0].x, ps[0].y, ps[0].z},
-                   (Vector3){ps[1].x, ps[1].y, ps[1].z},
-                   ps[0].w < ps[1].w ? BLUE : YELLOW);
-      }
-
-      EndMode3D();
-      EndTextureMode();
-      dirty = false;
+      goto rebuild;
     }
 
     // Draw cached texture to the screen
+  draw:
     BeginDrawing();
     ClearBackground(BLACK);
     Rectangle src = (Rectangle){0, 0, (float)rt.texture.width,
@@ -362,6 +344,23 @@ int main(int argc, char **argv) {
         (Rectangle){0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()};
     DrawTexturePro(rt.texture, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
     EndDrawing();
+    continue;
+
+  rebuild:
+    // Rebuild the cached texture
+    BeginTextureMode(rt);
+    ClearBackground(BLACK);
+    BeginMode3D(camera);
+
+    advance_ps_reset();
+    while (advance_ps()) {
+      DrawLine3D((Vector3){ps[0].x, ps[0].y, ps[0].z},
+                 (Vector3){ps[1].x, ps[1].y, ps[1].z},
+                 ps[0].w < ps[1].w ? BLUE : YELLOW);
+    }
+    EndMode3D();
+    EndTextureMode();
+    goto draw;
   }
   UnloadRenderTexture(rt);
   CloseWindow();
