@@ -296,8 +296,8 @@ int main(int argc, char **argv) {
       n++;
       n = n % 20;
       if (n)
-        if (mmapfile(argv[1]))
-          goto rebuild; // check mtime and reload
+        if (mmapfile(argv[1])) // check mtime and reload if needed
+          goto rebuild;
     }
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
