@@ -205,10 +205,9 @@ static float trimmed_avg(size_t off) {
         sorting[j] = sorting[j - 1];
       }
       sorting[j - 1] = v;
-      // printf("shift right into %d %f\n", j - 1, v);
     }
   }
-  printf("%f\n", sum / n);
+  return sum / n;
 }
 
 void gcode_bbox() {
