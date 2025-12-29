@@ -148,38 +148,67 @@ bool advance_ps() {
   return false;
 }
 
+void write_csv(char *path) {
+  FILE *h = fopen(path, "w");
+
+  fprintf(h, "x,y,z,e,x2,y2,z2,e2\n");
+  advance_ps_reset();
+  while (advance_ps()) {
+    fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f\n", ps[0].x, ps[0].y, ps[0].z, ps[0].w,
+            ps[1].x, ps[1].y, ps[1].z, ps[1].w);
+  }
+}
+
 Vector4 ps_max, ps_min, ps_avg, ps_trim;
 #define NTRIM 200
 static float sorting[NTRIM];
 static float trimmed_avg(size_t off) {
   advance_ps_reset();
   int n = 0;
-  while (n < NTRIM && advance_ps()) {
+  float sum = 0;
+  for (n = 0; n < NTRIM && advance_ps(); n++) {
 
 #define FIELDF(p, off) (*(float *)((char *)(p) + (off)))
 
     float v = FIELDF(&ps[1], off);
     int j = n;
-    while (j > 0 && sorting[j - 1] > v) {
+    for (; j > 0 && sorting[j - 1] > v; j--) {
       sorting[j] = sorting[j - 1];
-      j--;
     }
     sorting[j] = v;
-    n++;
   }
-  if (n > 2) {
-    float sum = 0.0f;
-    for (int j = 1; j < n - 1; j++)
-      sum += sorting[j];
-    return sum / (float)(n - 2);
-  } else if (n > 0) {
-    float sum = 0.0f;
-    for (int j = 0; j < n; j++)
-      sum += sorting[j];
-    return sum / (float)n;
-  } else {
-    return 0.0f;
+
+  n = 0;
+  while (advance_ps()) {
+    float v = FIELDF(&ps[1], off);
+    float a = sorting[NTRIM / 2 - 1];
+    float b = sorting[NTRIM / 2];
+    if (v >= a && v <= b) {
+      // no need to shift
+      sum += v;
+      n++;
+      // printf("keep %f<%f<%f\n", a, v, b);
+    }
+    if (v < a) {
+      // shift left inserting v
+      int j = 1;
+      for (; j < NTRIM && sorting[j] < v; j++) {
+        sorting[j - 1] = sorting[j];
+      }
+      // printf("shift left into %d %f\n", j, v);
+      sorting[j] = v;
+    }
+    if (v > b) {
+      // shift right inserting v
+      int j = NTRIM;
+      for (; j > 0 && sorting[j] > v; j--) {
+        sorting[j] = sorting[j - 1];
+      }
+      sorting[j - 1] = v;
+      // printf("shift right into %d %f\n", j - 1, v);
+    }
   }
+  printf("%f\n", sum / n);
 }
 
 void gcode_bbox() {
@@ -242,6 +271,9 @@ int main(int argc, char **argv) {
     exit(0);
   }
   mmapfile(argv[1]);
+  write_csv("out.csv");
+  advance_ps_reset();
+
   gcode_bbox();
 
   SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
