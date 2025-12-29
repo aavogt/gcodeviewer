@@ -1,0 +1,32 @@
+/* watch-code-cells segdistance.mac --reload codegen.mac 
+   maxima < segdistance.mac # without aavogt/watch-code-cells
+ * */
+/* 
+ if you have line segments p(s) q(s) on s from 0 to 1,
+
+  [a,c,e] = p0 - q0
+  [b,d,f] = (p1-p0) - (q1-q0)
+
+  this generates a f1 in src/segdistance.h which computes the area
+  in between the line segments.
+
+  but my line segments are 3-dimensional, and 3d integral
+  with the naive dy = c+ds; dz = e + fs can't be solved in a few seconds.
+
+  But we can pick a rotation that makes d=f=0, b >= 0. Apply it to [a,c,e] as well?
+  and this gives a closed form that's slower and probably slower and less
+  accurate than a numerical integration (even a fixed Gauss Konrod rule from
+  gsl or quadpack), but that benchmark is for later.
+ */ 
+load("codegen.mac")$
+dx : a + b*s;
+dy : c  ;
+dz : d ;
+assume(notequal(a, 0))$
+assume(d^2 + c^2 > 0)$
+assume(b > 0)$
+integrate(sqrt(dx^2 + dy^2 + dz^2), s, 0, 1)$
+r : radcan(%);
+with_stdout("../src/segdistance.h",
+  (printf(true, "// generated from ../mac/segdistance.mac~%"),
+   codegen(r)))$

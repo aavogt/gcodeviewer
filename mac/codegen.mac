@@ -1,0 +1,100 @@
+if optimprefix = '% then optimprefix : p;
+
+/* C code generation using stringproc + optimize */
+cexpr(e) := block([o, a, parts],
+  if atom(e) then return(string(e)),
+  o : op(e),
+  a : args(e),
+  if o = "^" then return(printf(false, "pow(~a, ~a)", cexpr(a[1]), cexpr(a[2]))),
+  if o = "-" and length(a) = 1 then return(printf(false, "(-~a)", cexpr(a[1]))),
+  if member(o, ["+", "-", "*", "/"]) then (
+    parts : ["("],
+    for i:1 thru length(a) do (
+      parts : endcons(cexpr(a[i]), parts),
+      if i < length(a) then parts : endcons(printf(false, " ~a ", o), parts)
+    ),
+    parts : endcons(")", parts),
+    return(simplode(parts))
+  ),
+  /* function call */
+  parts : [string(o), "("],
+  for i:1 thru length(a) do (
+    parts : endcons(cexpr(a[i]), parts),
+    if i < length(a) then parts : endcons(", ", parts)
+  ),
+  parts : endcons(")", parts),
+  return(simplode(parts))
+)$
+
+cassign_str(eq) := printf(false, "~a = ~a", string(lhs(eq)), cexpr(rhs(eq)));
+
+codegen_idx : 1;
+
+/* codegen(def):
+   def can be:
+   - expr                   => prints void get_result(..., double* result)
+   - name = expr            => same, using given output name
+   - [name1 = expr1, ...]   => emits typedef struct result_t {double name...;} and
+                               prints void get_result(..., result_t* result)
+  TODO arguments struct?
+*/
+codegen(def) := block(
+  [outnames, rlist, opres, cseNames, assigns, finals, allvars_raw, allvars_syms, allvars, i, eq,
+    codegen_idx_prev],
+  /* normalize outputs and expressions */
+  if listp(def) then (
+    outnames : map(lambda([x], string(lhs(x))), def),
+    rlist    : map(rhs, def)
+  )
+  else if op(def) = "=" then (
+    outnames : [string(lhs(def))],
+    rlist    : [rhs(def)]
+  )
+  else (
+    outnames : ["result"],
+    rlist    : [def]
+  ),
+
+  /* simplify + CSE optimize */
+  opres    : optimize(letsimp(rlist)),
+  cseNames : if is(op(opres) = 'block) then first(opres) else [],
+  assigns  : (if emptyp(cseNames) then [] else args(rest(rest(opres), -1))),
+  finals   : if emptyp(cseNames) then opres else last(args(opres)),
+
+  /* collect input variables (exclude outputs) */
+  allvars_raw : [],
+  for i:1 thru length(rlist) do allvars_raw : append(allvars_raw, listofvars(rlist[i])),
+  allvars_syms : sort(listify(setify(allvars_raw))),
+  allvars      : sublist(map(string, allvars_syms), lambda([v], not(member(v, outnames)))),
+
+  /* emit C */
+  if codegen_idx = 1 then printf(true, "#include <math.h>~%"),
+
+  if length(outnames) > 1 then block(
+    printf(true, "typedef struct { "),
+    for i:1 thru length(outnames) do printf(true, "double ~a;", outnames[i]),
+    printf(true, " } f~d_t;~%", codegen_idx)
+  ),
+
+  printf(true, "static void f~a(", codegen_idx),
+  for i:1 thru length(allvars) do (
+    if i > 1 then printf(true, ", "),
+    printf(true, "double ~a", allvars[i])
+  ),
+  if length(outnames) = 1 then printf(true, ", double * result) {~%")
+                         else printf(true, ", result_t * result) {~%"),
+
+  for eq in assigns do printf(true, "  double ~a;~%", cassign_str(eq)),
+
+  if length(outnames) = 1 then
+    for i:1 thru length(finals) do
+      printf(true, "  result[~a] = ~a;~%", i-1, cexpr(finals[i]))
+  else 
+    for i:1 thru length(outnames) do
+      printf(true, "  result->~a = ~a;~%", outnames[i], cexpr(finals[i]))
+  ,
+  printf(true, "}~%"),
+  codegen_idx_prev : codegen_idx,
+  codegen_idx : codegen_idx + 1,
+  printf(false, "f~d", codegen_idx_prev)
+);

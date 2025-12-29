@@ -9,6 +9,22 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "segdistance.h"
+
+/// get the area between segment p0-p1 and segment q0-q1
+/// what
+double segmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
+  // d = p0-q0
+  // dd = (p1-p0) - (q1-q0)
+  Vector3 d = Vector3Subtract(p0, q0), dp = Vector3Subtract(p1, p0),
+          dq = Vector3Subtract(q1, q0), dd = Vector3Subtract(dp, dq);
+  Quaternion q = QuaternionFromVector3ToVector3(dd, (Vector3){1, 0, 0});
+  Vector3 acd = Vector3RotateByQuaternion(d, q);
+  double r; // f1 special case return double instea
+  f1(acd.x, Vector3Length(dd), acd.y, acd.z, &r);
+  return r;
+}
+
 char *c, *cend, *c0;
 
 Vector4 ps[2];
