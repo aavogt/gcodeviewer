@@ -272,9 +272,9 @@ double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
 
 typedef enum {
   CLOSEST_SKIP_SELECTED = 1,
-  CLOSEST_ONLY_SELECTED,
-  CLOSEST_SKIP_G1,
-  CLOSEST_SKIP_G0,
+  CLOSEST_ONLY_SELECTED = 2,
+  CLOSEST_SKIP_G1 = 4,
+  CLOSEST_SKIP_G0 = 8,
 } closest;
 
 int closestToRay(Ray r, float *distance, closest flag) {
