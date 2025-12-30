@@ -270,17 +270,24 @@ double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
 // snap view?
 // two GetScreenToWorldRay
 
-/// loop through line segments finding the closest index,
-/// that isn't already selected
-/// optionally returning the distance
-/// i = closestToRay(r, NULL, skip);
-/// i = closestToRay(r, &d, skip);
-int closestToRay(Ray r, float *distance, bool skip_selected) {
+typedef enum {
+  CLOSEST_SKIP_SELECTED = 1,
+  CLOSEST_ONLY_SELECTED,
+  CLOSEST_SKIP_G1,
+  CLOSEST_SKIP_G0,
+} closest;
+
+int closestToRay(Ray r, float *distance, closest flag) {
   float dmax = INFINITY, d;
   int i = 0, imax = -1;
   advance_ps_reset();
   while (advance_ps()) {
-    if (ps[0].w > ps[1].w || (!skip_selected && selected_find(i))) {
+    bool is_sel = selected_find(i);
+    bool is_g0 = ps[0].w >= ps[1].w;
+    bool is_g1 = ps[0].w < ps[1].w;
+    if (flag & CLOSEST_SKIP_SELECTED && is_sel ||
+        flag & CLOSEST_ONLY_SELECTED && !is_sel ||
+        flag & CLOSEST_SKIP_G0 && is_g0 || flag & CLOSEST_SKIP_G1 && is_g1) {
       i++;
       continue;
     }
@@ -300,9 +307,14 @@ int main(int argc, char **argv) {
   if (argc == 1 || (argc >= 2 && (0 == strcmp(argv[1], "-h") ||
                                   0 == strcmp(argv[1], "--help")))) {
     printf("usage: %s file.gcode\n", argv[0]);
-    printf("\n\tq ESC quit\n\tleft mouse drag rotates the view\n");
-    printf("\tright mouse drag pans the view\n");
-    printf("\tmouse wheel drag zooms the view\n");
+    printf("\n\tq ESC quit\n\tLEFT MOUSE DRAG rotates the view\n"
+           "\tRIGHT MOUSE DRAG pans the view\n"
+           "\tMOUSE WHEEL DRAG zooms the view\n"
+           "\tSPACE adds the segment closest to the mouse to the selection\n"
+           "\tALT-SPACE toggles selection of the segment closest to the mouse\n"
+           "\tBACKSPACE removes the segment closest to the mouse from the "
+           "selection\n"
+           "\n\tfor now the selection only has a different rendering style\n");
 
     exit(0);
   }
@@ -341,16 +353,25 @@ int main(int argc, char **argv) {
           goto rebuild;
     }
 
-    if (IsKeyPressed(KEY_LEFT_SHIFT)) {
+    // SHIFT and CONTROL same as windows explorer?
+    // I'm not sure I want to actuate it with mouse clicks but rather with
+    // keyboard?
+    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_BACKSPACE)) {
       // draw a cursor, but
       Vector2 p = GetMousePosition();
       Ray r = GetScreenToWorldRay(p, camera);
       float d;
-      int i = closestToRay(r, &d, true);
-      printf("cast ray found %d distance %f selected_find()=%b\n", i, d,
-             selected_find(i));
-      if (!selected_find(i))
+      closest flag = IsKeyPressed(KEY_BACKSPACE) ? CLOSEST_ONLY_SELECTED
+                     : IsKeyDown(KEY_LEFT_ALT)   ? 0
+                                                 : CLOSEST_SKIP_SELECTED;
+      int i = closestToRay(r, &d, flag);
+      if (IsKeyPressed(KEY_BACKSPACE))
+        selected_remove(i);
+      else if (!selected_find(i)) {
         selected_add(i);
+      } else if (IsKeyDown(KEY_LEFT_ALT)) {
+        selected_remove(i);
+      }
       goto rebuild;
     };
 
