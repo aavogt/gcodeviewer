@@ -19,9 +19,7 @@ double segmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
           dq = Vector3Subtract(q1, q0), dd = Vector3Subtract(dp, dq);
   Quaternion q = QuaternionFromVector3ToVector3(dd, (Vector3){1, 0, 0});
   Vector3 acd = Vector3RotateByQuaternion(d, q);
-  double r; // f1 special case return double instea
-  f1(acd.x, Vector3Length(dd), acd.y, acd.z, &r);
-  return r;
+  return f1(acd.x, Vector3Length(dd), acd.y, acd.z);
 }
 
 char *c, *cend, *c0;
@@ -253,6 +251,34 @@ bool mmapfile(char *file) {
   statbuf_old = statbuf;
   c = c0;
   return true;
+}
+
+double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
+  Quaternion mkq =
+      QuaternionFromVector3ToVector3(q.direction, (Vector3){1, 0, 0});
+  Vector3 ft = Vector3Subtract(f, t), qf = Vector3Subtract(q.position, f);
+  ft = Vector3RotateByQuaternion(ft, mkq);
+  qf = Vector3RotateByQuaternion(qf, mkq);
+  return f2(qf.x, qf.y, qf.z, ft.x, ft.y, ft.z);
+}
+
+// calipers
+// snap view?
+// two GetScreenToWorldRay
+//
+int closestToRay(Ray r) {
+  float dmax = INFINITY, d;
+  int i = 0, imax = -1;
+  advance_ps_reset();
+  while (advance_ps()) {
+    d = DistanceToRay(r, (Vector3){ps[0].x, ps[0].y, ps[0].z},
+                      (Vector3){ps[1].x, ps[1].y, ps[1].z});
+    if (d < dmax) {
+      imax = i;
+      dmax = d;
+    }
+  }
+  return i;
 }
 
 int main(int argc, char **argv) {
