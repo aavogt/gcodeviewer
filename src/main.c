@@ -429,13 +429,12 @@ int main(int argc, char **argv) {
     advance_ps_reset();
     int j = 0;
     while (advance_ps()) {
+      Color c = ps[0].w < ps[1].w ? BLUE : YELLOW;
       if (selected_find(j)) {
-        DrawCapsule(Vector4To3(ps[0]), Vector4To3(ps[1]), 1, 10, 10,
-                    ps[0].w < ps[1].w ? BLUE : YELLOW);
+        DrawCapsule(Vector4To3(ps[0]), Vector4To3(ps[1]), 1, 10, 10, c);
 
       } else
-        DrawLine3D(Vector4To3(ps[0]), Vector4To3(ps[1]),
-                   ps[0].w < ps[1].w ? BLUE : YELLOW);
+        DrawLine3D(Vector4To3(ps[0]), Vector4To3(ps[1]), c);
       j++;
     }
     EndMode3D();
