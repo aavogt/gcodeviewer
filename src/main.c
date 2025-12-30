@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "segdistance.h"
+#include "selected.h"
 
 /// get the area between segment p0-p1 and segment q0-q1
 double SegmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
@@ -270,25 +271,29 @@ double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
 // two GetScreenToWorldRay
 
 /// loop through line segments finding the closest index,
+/// that isn't already selected
 /// optionally returning the distance
 /// i = closestToRay(r, NULL);
 /// i = closestToRay(r, &d);
-int closestToRay(Ray r, float *distance) {
+int closestToRay(Ray r, float *distance, bool skip_selected) {
   float dmax = INFINITY, d;
   int i = 0, imax = -1;
   advance_ps_reset();
   while (advance_ps()) {
-    if (ps[0].w > ps[1].w)
+    if (ps[0].w > ps[1].w || (!skip_selected && selected_find(i))) {
+      i++;
       continue;
+    }
     d = DistanceToRay(r, Vector4To3(ps[0]), Vector4To3(ps[1]));
     if (d < dmax) {
       imax = i;
       dmax = d;
     }
+    i++;
   }
   if (distance)
     *distance = dmax;
-  return i;
+  return imax;
 }
 
 int main(int argc, char **argv) {
@@ -301,6 +306,7 @@ int main(int argc, char **argv) {
 
     exit(0);
   }
+  selected_init();
   mmapfile(argv[1]);
   write_csv("out.csv");
   advance_ps_reset();
@@ -320,7 +326,6 @@ int main(int argc, char **argv) {
                      .target = (Vector3){ps_trim.x, ps_trim.y, ps_trim.z},
                      .up = (Vector3){0, 0, 1},
                      .projection = CAMERA_ORTHOGRAPHIC};
-
   // Render-to-texture cache for the 3D scene
   static RenderTexture2D rt;
   rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
@@ -335,6 +340,19 @@ int main(int argc, char **argv) {
         if (mmapfile(argv[1])) // check mtime and reload if needed
           goto rebuild;
     }
+
+    if (IsKeyPressed(KEY_LEFT_CONTROL)) {
+      // draw a cursor, but
+      Vector2 p = GetMousePosition();
+      Ray r = GetScreenToWorldRay(p, camera);
+      float d;
+      int i = closestToRay(r, &d, true);
+      printf("cast ray found %d distance %f selected_find()=%b\n", i, d,
+             selected_find(i));
+      if (!selected_find(i))
+        selected_add(i);
+      goto rebuild;
+    };
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
       // rotate
@@ -388,10 +406,16 @@ int main(int argc, char **argv) {
     BeginMode3D(camera);
 
     advance_ps_reset();
+    int j = 0;
     while (advance_ps()) {
-      DrawLine3D((Vector3){ps[0].x, ps[0].y, ps[0].z},
-                 (Vector3){ps[1].x, ps[1].y, ps[1].z},
-                 ps[0].w < ps[1].w ? BLUE : YELLOW);
+      if (selected_find(j)) {
+        DrawCapsule(Vector4To3(ps[0]), Vector4To3(ps[1]), 1, 10, 10,
+                    ps[0].w < ps[1].w ? BLUE : YELLOW);
+
+      } else
+        DrawLine3D(Vector4To3(ps[0]), Vector4To3(ps[1]),
+                   ps[0].w < ps[1].w ? BLUE : YELLOW);
+      j++;
     }
     EndMode3D();
     EndTextureMode();

@@ -16,6 +16,8 @@ file(GLOB SRC_CXX CONFIGURE_DEPENDS
 )
 set(MAIN_CXX "${CMAKE_CURRENT_SOURCE_DIR}/../src/main.c")
 list(REMOVE_ITEM SRC_CXX "${MAIN_CXX}")
-add_executable(gcodeviewer ${MAIN_CXX})
+add_executable(gcodeviewer ${SRC_CXX} ${MAIN_CXX})
+add_executable(test_selected ${SRC_CXX} "../src/selected.c")
+target_compile_definitions(test_selected PRIVATE TESTING)
 
 target_link_libraries(gcodeviewer PRIVATE raylib)
