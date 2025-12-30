@@ -78,8 +78,8 @@ bool advance_ps() {
                 rel[0] = rel[1] = rel[2] = rel[3] = true;
                 c = line_end;
                 continue;
-            // clang-format on
-            case 1: { // G1: move
+            case 0: case 1: { // G0 move G1: extrude move
+              // clang-format on
               ps[1] = ps[0];
 
               char *s = num_end; // after the numeric part of "G1"
