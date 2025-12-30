@@ -348,9 +348,8 @@ int main(int argc, char **argv) {
       static int n = 0;
       n++;
       n = n % 20;
-      if (n)
-        if (mmapfile(argv[1])) // check mtime and reload if needed
-          goto rebuild;
+      if (n && mmapfile(argv[1])) // check mtime and reload if needed
+        goto rebuild;
     }
 
     // SHIFT and CONTROL same as windows explorer?
