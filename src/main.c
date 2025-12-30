@@ -253,6 +253,9 @@ bool mmapfile(char *file) {
   return true;
 }
 
+Vector3 Vector4To3(Vector4 a) { return (Vector3){a.x, a.y, a.z}; }
+
+/// distance between a ray and a line segment
 double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
   Quaternion mkq =
       QuaternionFromVector3ToVector3(q.direction, (Vector3){1, 0, 0});
@@ -265,19 +268,26 @@ double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
 // calipers
 // snap view?
 // two GetScreenToWorldRay
-//
-int closestToRay(Ray r) {
+
+/// loop through line segments finding the closest index,
+/// optionally returning the distance
+/// i = closestToRay(r, NULL);
+/// i = closestToRay(r, &d);
+int closestToRay(Ray r, float *distance) {
   float dmax = INFINITY, d;
   int i = 0, imax = -1;
   advance_ps_reset();
   while (advance_ps()) {
-    d = DistanceToRay(r, (Vector3){ps[0].x, ps[0].y, ps[0].z},
-                      (Vector3){ps[1].x, ps[1].y, ps[1].z});
+    if (ps[0].w > ps[1].w)
+      continue;
+    d = DistanceToRay(r, Vector4To3(ps[0]), Vector4To3(ps[1]));
     if (d < dmax) {
       imax = i;
       dmax = d;
     }
   }
+  if (distance)
+    *distance = dmax;
   return i;
 }
 
