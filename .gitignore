@@ -1,0 +1,5 @@
+build
+src/segdistance.h
+.cache
+*.gcode
+out.csv
