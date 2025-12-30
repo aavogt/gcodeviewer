@@ -27,6 +27,21 @@ assume(d^2 + c^2 > 0)$
 assume(b > 0)$
 integrate(sqrt(dx^2 + dy^2 + dz^2), s, 0, 1)$
 r : radcan(%);
+
+/* [a,b,c] = r0 - p0
+ * ray: r0 + [1,0,0]s
+ * segment: p0 + [d,e,f]*t
+ */
+xr : a + s - d*t;
+yr : b + - e*t;
+zr : c + - f*t;
+dist : xr^2 + yr^2 + zr^2;
+stEq : solve([diff(dist, s), diff(dist, t)], [s,t])[1];
+
+minDist : subst([t=assoc(t, stEq),s = Clamp(assoc(s, stEq), 0, 1)], dist);
+
 with_stdout("../src/segdistance.h",
   (printf(true, "// generated from ../mac/segdistance.mac~%"),
-   codegen(r)))$
+   codegen(r),
+   codegen(minDist)
+   ))$
