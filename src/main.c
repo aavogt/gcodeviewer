@@ -12,7 +12,7 @@
 #include "segdistance.h"
 
 /// get the area between segment p0-p1 and segment q0-q1
-double segmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
+double SegmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
   // d = p0-q0
   // dd = (p1-p0) - (q1-q0)
   Vector3 d = Vector3Subtract(p0, q0), dp = Vector3Subtract(p1, p0),
