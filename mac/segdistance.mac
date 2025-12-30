@@ -38,7 +38,7 @@ zr : c + - f*t;
 dist : xr^2 + yr^2 + zr^2;
 stEq : solve([diff(dist, s), diff(dist, t)], [s,t])[1];
 
-minDist : subst([t=assoc(t, stEq),s = Clamp(assoc(s, stEq), 0, 1)], dist);
+minDist : subst([s=assoc(s, stEq),t = Clamp(assoc(t, stEq), 0, 1)], dist);
 
 with_stdout("../src/segdistance.h",
   (printf(true, "// generated from ../mac/segdistance.mac~%"),

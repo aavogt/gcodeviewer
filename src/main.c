@@ -260,10 +260,10 @@ Vector3 Vector4To3(Vector4 a) { return (Vector3){a.x, a.y, a.z}; }
 double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
   Quaternion mkq =
       QuaternionFromVector3ToVector3(q.direction, (Vector3){1, 0, 0});
-  Vector3 ft = Vector3Subtract(f, t), qf = Vector3Subtract(q.position, f);
+  Vector3 ft = Vector3Subtract(f, t), qt = Vector3Subtract(q.position, t);
   ft = Vector3RotateByQuaternion(ft, mkq);
-  qf = Vector3RotateByQuaternion(qf, mkq);
-  return f2(qf.x, qf.y, qf.z, ft.x, ft.y, ft.z);
+  qt = Vector3RotateByQuaternion(qt, mkq);
+  return f2(qt.x, qt.y, qt.z, ft.x, ft.y, ft.z);
 }
 
 // calipers
@@ -273,8 +273,8 @@ double DistanceToRay(Ray q, Vector3 f, Vector3 t) {
 /// loop through line segments finding the closest index,
 /// that isn't already selected
 /// optionally returning the distance
-/// i = closestToRay(r, NULL);
-/// i = closestToRay(r, &d);
+/// i = closestToRay(r, NULL, skip);
+/// i = closestToRay(r, &d, skip);
 int closestToRay(Ray r, float *distance, bool skip_selected) {
   float dmax = INFINITY, d;
   int i = 0, imax = -1;
@@ -341,7 +341,7 @@ int main(int argc, char **argv) {
           goto rebuild;
     }
 
-    if (IsKeyPressed(KEY_LEFT_CONTROL)) {
+    if (IsKeyPressed(KEY_LEFT_SHIFT)) {
       // draw a cursor, but
       Vector2 p = GetMousePosition();
       Ray r = GetScreenToWorldRay(p, camera);
