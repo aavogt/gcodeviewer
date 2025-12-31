@@ -412,14 +412,15 @@ int main(int argc, char **argv) {
            "\tALT-SPACE toggles selection of the segment closest to the mouse\n"
            "\tBACKSPACE removes the segment closest to the mouse from the "
            "selection\n"
-           "\n\tfor now the selection only has a different rendering style\n");
+           "\n\tfor now the selection has a different rendering style"
+           "\n\tand is saved to gcodeviewer_selected.csv\n");
 
     exit(0);
   }
   selected_init();
   mmapfile(argv[1]);
-  write_csv("out.csv", 0);
-  write_csv("selected.csv", CLOSEST_ONLY_SELECTED);
+  write_csv("gcodeviewer_out.csv", 0);
+  write_csv("gcodeviewer_selected.csv", CLOSEST_ONLY_SELECTED);
   advance_ps_reset();
 
   gcode_bbox();
@@ -482,7 +483,7 @@ int main(int argc, char **argv) {
           selected_add(i);
         else if (alt)
           selected_remove(i);
-        write_csv("selected.csv", CLOSEST_ONLY_SELECTED);
+        write_csv("gcodeviewer_selected.csv", CLOSEST_ONLY_SELECTED);
         goto rebuild;
       };
     }
