@@ -482,7 +482,6 @@ int main(int argc, char **argv) {
           selected_add(i);
         else if (alt)
           selected_remove(i);
-        // TODO in selection order not in gcode order?
         write_csv("selected.csv", CLOSEST_ONLY_SELECTED);
         goto rebuild;
       };
