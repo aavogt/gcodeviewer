@@ -27,7 +27,7 @@ char *c, *cend, *c0;
 
 Vector4 ps[2];
 
-static bool rel[4] = {false, false, false, false}; // X,Y,Z,E relative flags
+bool rel[4]; // X,Y,Z,E relative flags
 
 static inline int isspace_ascii(char ch) {
   return ch == ' ' || ch == '\t' || ch == '\r';
