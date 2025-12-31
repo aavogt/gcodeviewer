@@ -12,6 +12,8 @@
 #include "segdistance.h"
 #include "selected.h"
 
+Vector3 Vector4To3(Vector4 a) { return (Vector3){a.x, a.y, a.z}; }
+
 /// get the area between segment p0-p1 and segment q0-q1
 double SegmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
   // d = p0-q0
@@ -21,6 +23,11 @@ double SegmentDistance(Vector3 p0, Vector3 p1, Vector3 q0, Vector3 q1) {
   Quaternion q = QuaternionFromVector3ToVector3(dd, (Vector3){1, 0, 0});
   Vector3 acd = Vector3RotateByQuaternion(d, q);
   return f1(acd.x, Vector3Length(dd), acd.y, acd.z);
+}
+
+double SegmentDistance4(Vector4 ps[2], Vector4 qs[2]) {
+  return SegmentDistance(Vector4To3(ps[0]), Vector4To3(ps[1]),
+                         Vector4To3(qs[0]), Vector4To3(qs[1]));
 }
 
 char *c, *cend, *c0;
@@ -214,6 +221,81 @@ void gcode_bbox() {
     FIELDF(&ps_trim, o[i]) = trimmed_avg(o[i]);
 }
 
+// is this the operation that'll make me give up on advance_ps
+// and instead allocate a buffer of floats with the points that's easier to
+// random access?
+Vector4 qs[2];
+bool sel[4];
+char *d, *d0, *dend;
+void swapcd() {
+  for (size_t i = 0; i < 2; ++i) {
+    Vector4 tmp = qs[i];
+    qs[i] = ps[i];
+    ps[i] = tmp;
+  }
+  for (size_t i = 0; i < 4; ++i) {
+    bool tmpb = sel[i];
+    sel[i] = rel[i];
+    rel[i] = tmpb;
+  }
+  char *t0 = c0;
+  c0 = d0;
+  d0 = t0;
+  char *te = cend;
+  cend = dend;
+  dend = te;
+}
+bool advance_qs() {
+  swapcd();
+  bool r = advance_ps();
+  swapcd();
+  return r;
+};
+void advance_qs_reset() {
+  d = d0;
+  qs[1] = (Vector4){0, 0, 0, 0};
+  for (int i = 0; i < 4; i++)
+    sel[i] = 0;
+}
+
+// the old gcode file is d, d0, dend, qs, advance_qs()
+// the new gcode file is c, c0, cend, ps, advance_ps()
+// try to update selected[] so that the new indexes
+// are as close as possible
+// TODO: lines can break apart or combine
+// SegmentDistance can't take polylines
+// I need a different distance calculation which
+// allows one line to be bare with some value
+// returned indicating which sides are uncovered.
+// In other words the result of a single call to
+// SegmentDistance4Growable() will be like
+// an intersection of intervals.
+// TODO ps and qs sequences are usually sorted
+// by z so there's no need to look far
+void selected_refresh() {
+  advance_qs_reset();
+  int i = 0;
+  while (advance_qs()) {
+    int j = selected_index(i);
+    if (j != SELECTED_EMPTY) {
+      double dmin = INFINITY;
+      int k = 0, kmin = 0;
+      advance_ps_reset();
+      while (advance_ps()) {
+        double d = SegmentDistance4(ps, qs);
+        if (d < dmin) {
+          // XXX k not already taken but how do I check?
+          // selected[] has old and new mixed up
+          kmin = k;
+        }
+        k++;
+      }
+      selected[j] = kmin;
+    }
+    i++;
+  }
+}
+
 struct stat statbuf_old;
 /// mmap or munmap/mmap the given file,
 /// depending on mtime
@@ -229,7 +311,18 @@ bool mmapfile(char *file) {
                  (statbuf.st_mtim.tv_sec == statbuf_old.st_mtim.tv_sec &&
                   statbuf.st_mtim.tv_nsec > statbuf_old.st_mtim.tv_nsec);
     if (newer) {
-      munmap(c0, cend - c0);
+      swapcd();
+
+      c0 = mmap(NULL, statbuf.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+      cend = c0 + statbuf.st_size;
+      statbuf_old = statbuf;
+      c = c0;
+
+      selected_refresh();
+
+      munmap(d0, dend - d0);
+      return true;
     } else {
       close(fd);
       return false;
@@ -242,8 +335,6 @@ bool mmapfile(char *file) {
   c = c0;
   return true;
 }
-
-Vector3 Vector4To3(Vector4 a) { return (Vector3){a.x, a.y, a.z}; }
 
 /// distance between a ray and a line segment
 double DistanceToRay(Ray q, Vector3 f, Vector3 t) {

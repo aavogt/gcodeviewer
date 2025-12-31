@@ -125,6 +125,8 @@ int main() {
   assert(!selected_find((size_t)0));
 
   // Duplicates behave like a multiset: removing one occurrence keeps others
+  // selected_refresh() only supports a single occurrence, consistent with
+  // calls to selected_add being guarded by selected_find in main.c
   selected_init();
   size_t v = (size_t)123456;
   selected_add(v);
