@@ -352,27 +352,40 @@ int main(int argc, char **argv) {
         goto rebuild;
     }
 
-    // SHIFT and CONTROL same as windows explorer?
-    // I'm not sure I want to actuate it with mouse clicks but rather with
-    // keyboard?
-    if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_BACKSPACE)) {
-      // draw a cursor, but
-      Vector2 p = GetMousePosition();
-      Ray r = GetScreenToWorldRay(p, camera);
-      float d;
-      closest flag = IsKeyPressed(KEY_BACKSPACE) ? CLOSEST_ONLY_SELECTED
-                     : IsKeyDown(KEY_LEFT_ALT)   ? 0
-                                                 : CLOSEST_SKIP_SELECTED;
-      int i = closestToRay(r, &d, flag);
-      if (IsKeyPressed(KEY_BACKSPACE))
-        selected_remove(i);
-      else if (!selected_find(i)) {
-        selected_add(i);
-      } else if (IsKeyDown(KEY_LEFT_ALT)) {
-        selected_remove(i);
-      }
-      goto rebuild;
-    };
+    // The mouse buttons are already used for navigation.
+    // The usual way is to shift-click, ctrl-click or toggle a mode somehow.
+    // But here it's simpler because keyboard keys directly use mouse
+    // coordinates. Mouse forward and back buttons should do something,
+    // but MAX_MOUSE_BUTTONS is 8 and depending on my setup, xev either
+    // gives mouse buttons 8 and 9, or with xdotool I produce
+    // keycode 117 (keysym 0xff56, Next)
+    // keycode 112 (keysym 0xff55, Prior)
+    //
+    // Left-alt-space toggles
+    // backspace deletes
+    // space adds
+    {
+      bool back = IsKeyPressed(KEY_BACKSPACE) ||
+                  IsMouseButtonPressed(MOUSE_BUTTON_BACK);
+      bool space =
+          IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_FORWARD);
+      bool alt = IsKeyDown(KEY_LEFT_ALT);
+      if (back || space) {
+        Vector2 p = GetMousePosition();
+        Ray r = GetScreenToWorldRay(p, camera);
+        closest flag = back  ? CLOSEST_ONLY_SELECTED
+                       : alt ? 0
+                             : CLOSEST_SKIP_SELECTED;
+        int i = closestToRay(r, NULL, flag);
+        if (back)
+          selected_remove(i);
+        else if (!selected_find(i))
+          selected_add(i);
+        else if (alt)
+          selected_remove(i);
+        goto rebuild;
+      };
+    }
 
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
       // rotate
