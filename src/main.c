@@ -303,7 +303,8 @@ void write_csv(char *path, closest flag) {
   while (advance_ps()) {
     if (selected_keep_row(i, flag))
       fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f,%d\n", ps[0].x, ps[0].y, ps[0].z,
-              ps[0].w, ps[1].x, ps[1].y, ps[1].z, ps[1].w, selected_index(i));
+              ps[0].w, ps[1].x, ps[1].y, ps[1].z, ps[1].w,
+              (int)selected_index(i));
     i++;
   }
   fclose(h);
