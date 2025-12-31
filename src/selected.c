@@ -26,6 +26,18 @@ void selected_add(size_t x) {
     s = selected;
 }
 
+// pop isn't what I wanted though?
+// I wanted an iterator
+// or at least the index
+bool selected_pop(size_t *x) {
+  *x = *s;
+  if (s == selected)
+    s = send;
+  else
+    s--;
+  return *x == SELECTED_EMPTY;
+}
+
 void selected_remove(size_t x) {
   int pos = -1;
   for (int i = 0; i < MAXSEL; i++) {
@@ -58,6 +70,14 @@ void selected_remove(size_t x) {
     selected[j] = SELECTED_EMPTY;
     s = selected + j;
   }
+}
+
+size_t selected_index(size_t x) {
+  for (int i = 0; i < MAXSEL; i++) {
+    if (selected[i] == x)
+      return i;
+  }
+  return SELECTED_EMPTY;
 }
 
 bool selected_find(size_t x) {

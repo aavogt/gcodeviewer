@@ -297,13 +297,13 @@ int closestToRay(Ray r, float *distance, closest flag) {
 void write_csv(char *path, closest flag) {
   FILE *h = fopen(path, "w");
 
-  fprintf(h, "x,y,z,e,x2,y2,z2,e2\n");
+  fprintf(h, "x,y,z,e,x2,y2,z2,e2,isel\n");
   advance_ps_reset();
   int i = 0;
   while (advance_ps()) {
     if (selected_keep_row(i, flag))
-      fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f\n", ps[0].x, ps[0].y, ps[0].z,
-              ps[0].w, ps[1].x, ps[1].y, ps[1].z, ps[1].w);
+      fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f,%d\n", ps[0].x, ps[0].y, ps[0].z,
+              ps[0].w, ps[1].x, ps[1].y, ps[1].z, ps[1].w, selected_index(i));
     i++;
   }
   fclose(h);
@@ -327,6 +327,7 @@ int main(int argc, char **argv) {
   selected_init();
   mmapfile(argv[1]);
   write_csv("out.csv", 0);
+  write_csv("selected.csv", CLOSEST_ONLY_SELECTED);
   advance_ps_reset();
 
   gcode_bbox();
@@ -389,6 +390,8 @@ int main(int argc, char **argv) {
           selected_add(i);
         else if (alt)
           selected_remove(i);
+        // TODO in selection order not in gcode order?
+        write_csv("selected.csv", CLOSEST_ONLY_SELECTED);
         goto rebuild;
       };
     }
