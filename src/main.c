@@ -146,17 +146,6 @@ bool advance_ps() {
   return false;
 }
 
-void write_csv(char *path) {
-  FILE *h = fopen(path, "w");
-
-  fprintf(h, "x,y,z,e,x2,y2,z2,e2\n");
-  advance_ps_reset();
-  while (advance_ps()) {
-    fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f\n", ps[0].x, ps[0].y, ps[0].z, ps[0].w,
-            ps[1].x, ps[1].y, ps[1].z, ps[1].w);
-  }
-}
-
 Vector4 ps_max, ps_min, ps_avg, ps_trim;
 #define NTRIM 200
 static float sorting[NTRIM];
@@ -277,30 +266,47 @@ typedef enum {
   CLOSEST_SKIP_G0 = 8,
 } closest;
 
+bool selected_keep_row(int i, closest flag) {
+  bool is_sel = selected_find(i);
+  bool is_g0 = ps[0].w >= ps[1].w;
+  bool is_g1 = ps[0].w < ps[1].w;
+  return !(flag & CLOSEST_SKIP_SELECTED && is_sel ||
+           flag & CLOSEST_ONLY_SELECTED && !is_sel ||
+           flag & CLOSEST_SKIP_G0 && is_g0 || flag & CLOSEST_SKIP_G1 && is_g1);
+}
+
 int closestToRay(Ray r, float *distance, closest flag) {
   float dmax = INFINITY, d;
   int i = 0, imax = -1;
   advance_ps_reset();
   while (advance_ps()) {
-    bool is_sel = selected_find(i);
-    bool is_g0 = ps[0].w >= ps[1].w;
-    bool is_g1 = ps[0].w < ps[1].w;
-    if (flag & CLOSEST_SKIP_SELECTED && is_sel ||
-        flag & CLOSEST_ONLY_SELECTED && !is_sel ||
-        flag & CLOSEST_SKIP_G0 && is_g0 || flag & CLOSEST_SKIP_G1 && is_g1) {
-      i++;
-      continue;
-    }
-    d = DistanceToRay(r, Vector4To3(ps[0]), Vector4To3(ps[1]));
-    if (d < dmax) {
-      imax = i;
-      dmax = d;
+    if (selected_keep_row(i, flag)) {
+      d = DistanceToRay(r, Vector4To3(ps[0]), Vector4To3(ps[1]));
+      if (d < dmax) {
+        imax = i;
+        dmax = d;
+      }
     }
     i++;
   }
   if (distance)
     *distance = dmax;
   return imax;
+}
+
+void write_csv(char *path, closest flag) {
+  FILE *h = fopen(path, "w");
+
+  fprintf(h, "x,y,z,e,x2,y2,z2,e2\n");
+  advance_ps_reset();
+  int i = 0;
+  while (advance_ps()) {
+    if (selected_keep_row(i, flag))
+      fprintf(h, "%f,%f,%f,%f,%f,%f,%f,%f\n", ps[0].x, ps[0].y, ps[0].z,
+              ps[0].w, ps[1].x, ps[1].y, ps[1].z, ps[1].w);
+    i++;
+  }
+  fclose(h);
 }
 
 int main(int argc, char **argv) {
@@ -320,7 +326,7 @@ int main(int argc, char **argv) {
   }
   selected_init();
   mmapfile(argv[1]);
-  write_csv("out.csv");
+  write_csv("out.csv", 0);
   advance_ps_reset();
 
   gcode_bbox();
