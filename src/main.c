@@ -12,6 +12,9 @@
 #include "segdistance.h"
 #include "selected.h"
 
+// maximum output csv filename length
+#define NFILENAME 200
+
 Vector3 Vector4To3(Vector4 a) { return (Vector3){a.x, a.y, a.z}; }
 
 /// get the area between segment p0-p1 and segment q0-q1
@@ -402,6 +405,27 @@ void write_csv(char *path, closest flag) {
 }
 
 int main(int argc, char **argv) {
+  static char csvout[NFILENAME + 1] = "gcodeviewer_out.csv";
+  static char csvselected[NFILENAME + 1] = "gcodeviewer_selected.csv";
+
+  {
+    char *csvprefix = getenv("CSV_PREFIX");
+    if (csvprefix) {
+      csvout[0] = csvselected[0] = '\0';
+      if (strlen(csvprefix) + strlen("selected.csv") > NFILENAME) {
+        fprintf(
+            stderr,
+            "CSV_PREFIX too long: main.c `#define NFILENAME %d` is too low\n",
+            NFILENAME);
+        exit(-1);
+      }
+      strncat(csvout, csvprefix, NFILENAME);
+      strncat(csvselected, csvprefix, NFILENAME);
+      strncat(csvout, "out.csv", NFILENAME);
+      strncat(csvselected, "selected.csv", NFILENAME);
+    }
+  }
+
   if (argc == 1 || (argc >= 2 && (0 == strcmp(argv[1], "-h") ||
                                   0 == strcmp(argv[1], "--help")))) {
     printf("usage: %s file.gcode\n", argv[0]);
@@ -412,15 +436,22 @@ int main(int argc, char **argv) {
            "\tALT-SPACE toggles selection of the segment closest to the mouse\n"
            "\tBACKSPACE removes the segment closest to the mouse from the "
            "selection\n"
-           "\n\tfor now the selection has a different rendering style"
-           "\n\tand is saved to gcodeviewer_selected.csv\n");
+           "\n\tThe  selection has a different rendering style"
+           "\n\tand is saved to csv files %s and %s\n"
+           "\n\t`CSV_PREFIX=abc_ %s` saves abc_out.csv and "
+           "abc_selected.csv instead\n"
+           "\n\tcsv files have columns x,y,z,e, x2,y2,z2,e2, isel"
+           "\n\t  where xyze are coordinates of the start points and xyze2 are "
+           "the end"
+           "\n\t  and isel 0 is the first selected point, -1 is not selected\n",
+           csvout, csvselected, argv[0]);
 
     exit(0);
   }
   selected_init();
   mmapfile(argv[1]);
-  write_csv("gcodeviewer_out.csv", 0);
-  write_csv("gcodeviewer_selected.csv", CLOSEST_ONLY_SELECTED);
+  write_csv(csvout, 0);
+  write_csv(csvselected, CLOSEST_ONLY_SELECTED);
   advance_ps_reset();
 
   gcode_bbox();
@@ -483,7 +514,7 @@ int main(int argc, char **argv) {
           selected_add(i);
         else if (alt)
           selected_remove(i);
-        write_csv("gcodeviewer_selected.csv", CLOSEST_ONLY_SELECTED);
+        write_csv(csvselected, CLOSEST_ONLY_SELECTED);
         goto rebuild;
       };
     }
