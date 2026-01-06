@@ -469,10 +469,8 @@ int main(int argc, char **argv) {
                      .target = (Vector3){ps_trim.x, ps_trim.y, ps_trim.z},
                      .up = (Vector3){0, 0, 1},
                      .projection = CAMERA_ORTHOGRAPHIC};
-  // Render-to-texture cache for the 3D scene
-  static RenderTexture2D rt;
-  rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
+  static bool once = false;
   while (!WindowShouldClose() && !IsKeyPressed(KEY_Q) &&
          !IsKeyPressed(KEY_ESCAPE)) {
     {
@@ -480,7 +478,7 @@ int main(int argc, char **argv) {
       n++;
       n = n % 20;
       if (n && mmapfile(argv[1])) // check mtime and reload if needed
-        goto rebuild;
+        goto redraw;
     }
 
     // The mouse buttons are already used for navigation.
@@ -515,7 +513,7 @@ int main(int argc, char **argv) {
         else if (alt)
           selected_remove(i);
         write_csv(csvselected, CLOSEST_ONLY_SELECTED);
-        goto rebuild;
+        goto redraw;
       };
     }
 
@@ -523,7 +521,7 @@ int main(int argc, char **argv) {
       // rotate
       UpdateCamera(&camera, CAMERA_THIRD_PERSON);
       if (Vector2LengthSqr(GetMouseDelta()) > 0)
-        goto rebuild;
+        goto redraw;
     }
     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
       // pan
@@ -534,39 +532,28 @@ int main(int argc, char **argv) {
       Vector3 d = Vector3Subtract(s, r);
       camera.position = Vector3Add(camera.position, d);
       camera.target = Vector3Add(camera.target, d);
-      goto rebuild;
+      goto redraw;
     }
     {
       // zoom
       float f = GetMouseWheelMove();
       camera.fovy = Clamp(camera.fovy / (1 + f / 6) - 7 * f, 20, 120);
       if (fabsf(f) > 0)
-        goto rebuild;
+        goto redraw;
     }
 
     // Recreate render target on window resize
-    if (IsWindowResized() && (rt.texture.height < GetScreenHeight() ||
-                              rt.texture.width < GetScreenWidth())) {
-      UnloadRenderTexture(rt);
-      rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-      goto rebuild;
+    if (IsWindowResized()) {
+      goto redraw;
     }
 
-    // Draw cached texture to the screen
-  draw:
     BeginDrawing();
-    ClearBackground(BLACK);
-    Rectangle src = (Rectangle){0, 0, (float)rt.texture.width,
-                                -(float)rt.texture.height}; // flip vertically
-    Rectangle dst =
-        (Rectangle){0, 0, (float)GetScreenWidth(), (float)GetScreenHeight()};
-    DrawTexturePro(rt.texture, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
     EndDrawing();
     continue;
 
-  rebuild:
+  redraw:
     // Rebuild the cached texture
-    BeginTextureMode(rt);
+    BeginDrawing();
     ClearBackground(BLACK);
     BeginMode3D(camera);
 
@@ -582,9 +569,7 @@ int main(int argc, char **argv) {
       j++;
     }
     EndMode3D();
-    EndTextureMode();
-    goto draw;
+    EndDrawing();
   }
-  UnloadRenderTexture(rt);
   CloseWindow();
 }
